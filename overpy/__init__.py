@@ -47,7 +47,7 @@ class Overpass(object):
     default_read_chunk_size = 4096
     default_url = "http://overpass-api.de/api/interpreter"
 
-    def __init__(self, read_chunk_size=None, url=None, xml_parser=XML_PARSER_SAX):
+    def __init__(self, read_chunk_size=None, url=None, xml_parser=XML_PARSER_SAX, file_cache=None):
         """
         :param read_chunk_size: Max size of each chunk read from the server response
         :type read_chunk_size: Integer
@@ -56,6 +56,7 @@ class Overpass(object):
         :param xml_parser: The xml parser to use
         :type xml_parser: Integer
         """
+        self.file_cache = file_cache
         self.url = self.default_url
         if url is not None:
             self.url = url
@@ -99,10 +100,10 @@ class Overpass(object):
                 content_type = f.getheader("Content-Type")
 
             if content_type == "application/json":
-                return self.parse_json(response)
+                return self.parse_json(response, file_cache=self.file_cache)
 
             if content_type == "application/osm3s+xml":
-                return self.parse_xml(response)
+                return self.parse_xml(response, file_cache=self.file_cache)
 
             raise exception.OverpassUnknownContentType(content_type)
 
@@ -129,7 +130,7 @@ class Overpass(object):
 
         raise exception.OverpassUnknownHTTPStatusCode(f.code)
 
-    def parse_json(self, data, encoding="utf-8"):
+    def parse_json(self, data, encoding="utf-8", file_cache=None):
         """
         Parse raw response from Overpass service.
 
@@ -142,10 +143,14 @@ class Overpass(object):
         """
         if isinstance(data, bytes):
             data = data.decode(encoding)
+
+        if file_cache:
+            file_cache.cache(data)
+
         data = json.loads(data, parse_float=Decimal)
         return Result.from_json(data, api=self)
 
-    def parse_xml(self, data, encoding="utf-8", parser=None):
+    def parse_xml(self, data, encoding="utf-8", parser=None, file_cache=None):
         """
 
         :param data: Raw XML Data
@@ -163,6 +168,9 @@ class Overpass(object):
         if PY2 and not isinstance(data, str):
             # Python 2.x: Convert unicode strings
             data = data.encode(encoding)
+
+        if file_cache:
+            file_cache.cache(data)
 
         return Result.from_xml(data, api=self, parser=parser)
 
